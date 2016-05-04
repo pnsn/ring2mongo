@@ -8,9 +8,9 @@ Trace Data are written to a single collection and indexed on key (SCNL) and star
 2) Collection: continuous
 
 To set up mongo do the folllowing:
-1. <code> > use waveform </code>
-2. <code> > db.createCollection( "continuous", { capped: true, size: SOME_SIZE_IN_BYTES } ) </code>
-3. <code> > db.createIndex({"key": 1, "starttime": 1}) </code>
+* <code> > use waveform </code>
+* <code> > db.createCollection( "continuous", { capped: true, size: SOME_SIZE_IN_BYTES } ) </code>
+* <code> > db.createIndex({"key": 1, "starttime": 1}) </code>
 
 
 
@@ -21,8 +21,8 @@ Use as a docker routine for local testing and configuration. Docker has not been
 
 <code>./ew_containerize</code>
 This script will do the following: 
-1. Mount the current $dir/params to the ew params dir, which will put your local files into the ew params directory.
-2. Start an interactive shell and put you in the mounted params dir
+* Mount the current $dir/params to the ew params dir, which will put your local files into the ew params directory.
+* Start an interactive shell and put you in the mounted params dir
 
 Next run the startstop script in the params dir
 <code>startstop.sh</code>
