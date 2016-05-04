@@ -1,360 +1,389 @@
+  /*****************************************************************
+   *                            ring2mongo.c                        *
+   *                                                               *
+   * Canabalized sniffwave program that reads ring data and writes to 
+     mongo db
+        
+        
+        Since we always want data, the data param has been removed
+       otherwise is functions just like ring2mongo.
+   *                                                               *
+
+   * Usage: ring2mongo  <Ring> <Sta> <Comp> <Net> <Loc>   *
+   *    or: ring2mongo  <Ring> <Sta> <Comp> <Net>        *
+   *    or: ring2mongo  <Ring>                                      *
+   *                                                               *
+   *****************************************************************/
+
+
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
-#include <time.h>
-#include <earthworm.h>
-// #include <kom.h>
+#include <stdlib.h>
+#include <math.h>
 #include <transport.h>
+#include <swap.h>
+#include <time_ew.h>
 #include <trace_buf.h>
-// #include <swap.h>
-#include <rdpickcoda.h>
+#include <earthworm.h>
+#include <libmseed.h>
 
-typedef struct {
-        int     pinno;                 /* Pin number */
-        int     nsamp;                 /* Number of samples in packet */
-        double  starttime;             /* time of first sample in epoch seconds
-                                          (seconds since midnight 1/1/1970) */
-        double  endtime;               /* Time of last sample in epoch seconds */
-        double  samprate;              /* Sample rate; nominal */
-        char    sta[TRACE2_STA_LEN];   /* Site name (NULL-terminated) */
-        char    net[TRACE2_NET_LEN];   /* Network name (NULL-terminated) */
-        char    chan[TRACE2_CHAN_LEN]; /* Component/channel code (NULL-terminated)*/
-        char    loc[TRACE2_LOC_LEN];   /* Location code (NULL-terminated) */
-        char    version[2];            /* version field */
-        char    datatype[3];           /* Data format code (NULL-terminated) */
-        /* quality and pad are available in version 20, see TRACE2X_HEADER */
-        char    quality[2];            /* Data-quality field */
-        char    pad[2];                /* padding */
-        int     data[4096];
-} TRACEBUF2_PLAIN;
+#include <mongoc.h>
+#include <bson.h>
+#include <bcon.h>
+
+#define NLOGO 5
+
+#define TYPE_NOTUSED 254
+
+int IsWild( char *str )
+{
+  if( (strcmp(str,"wild")==0)  ) return 1;
+  if( (strcmp(str,"WILD")==0)  ) return 1;
+  if( (strcmp(str,"*")   ==0)  ) return 1;
+  return 0;
+}
 
 
 
-/* Functions in this file */
-void StartupErrorMsg( FILE *std );
-TRACEBUF2_PLAIN * unpack_tracebuf2(char *msg, int msglen, unsigned char type);
-void tbuf2string(TRACEBUF2_PLAIN *tbuf);
-int write2mongo(char *msg, int msglen, unsigned char type );
-int tracehead2json( char *msg, char *buf, int buflen );
+/* Cast quality fields to unsigned char when you want convert to hexadecimal. */
+#define CAST_QUALITY( q ) ( (unsigned char) q )
+
+/************************************************************************************/
 
 
-#define MAX_RINGS	5
-#define NUMLOGOS	2
-#define MAXMSGLEN	4096  
-#define MINARGS		1
-
-
-// #define MAXFIFO 200 //num of TraceBuf2 in Buf
-//
-// /* FIFO management Functions */
-// typedef struct _FIFOMSG {
-//   char      *msg;
-//   int        msglen;
-//   long      seq;
-//   int        type;
-//   struct _FIFOMSG  *next;
-// } FIFOMSG;
-
-
-
-/* Globals */
-unsigned char	Type_TraceBuf2;
-unsigned char	Type_PickSCNL;
-unsigned char	ModWildcard;
-unsigned char	InstWildcard;
-//fifo
-// FIFOMSG    *fifoStart = NULL;
-// FIFOMSG    *fifoEnd = NULL;
-// int      fifoC = 0;
-// int      fifokey = 0;
-
-
-/* Main Program */
-int main( int argc, char **argv ){
-  MSG_LOGO	GetLogo[NUMLOGOS];		/* Message logos to retrieve */
-	SHM_INFO	InRegion[MAX_RINGS];
-	long		InRingKey[MAX_RINGS];	/* keys of transport input ring */
-	unsigned char 	seq[MAX_RINGS];		/* Sequence numbers */
-	int			nRings = 0;				/* Number of considered rings increment by reading ring args*/
-	char		*msgbuf;				/* Message buffer */
-	long		recsize;				/* Length of received message */
-	MSG_LOGO	reclogo;				/* Logo of received message */
-	int			rc;						/* Receive code */
-	int			i;						/* Generic counter */
-	int 		seqno;					/* Internal msg sequence number */
-	char		*argps, *argpe;			/* For parsing arguments */
-	int			cargs = 0;				/* Counting mandatory arguments */
- 
-	/* Process input arguments */
-	if( argc < 2 ){
-		/* Give error msg */
-    StartupErrorMsg( stderr );
-		return -1;
-	}else{
-		for( i = 1; i < argc; i++ ){
-			/* Earthworm rings */
-      if( strstr( argv[i], "-r" ) != NULL ){
-				while( ++i < argc && argv[i][0] != '-' ){
-					if( nRings < MAX_RINGS ){
-						if( ( InRingKey[nRings++] = GetKey( argv[i] ) ) == -1 ){
-							/* Invalid ring name */
-							fprintf( stderr, "%s: Invalid ring - %s\n", argv[0],
-									argv[i] );
-							exit( -1 );
-						}
-						cargs++;
-					}else{
-						/* Number of rings exceeds maximum */
-						fprintf( stderr, 
-								"%s: Maximum number of rings <%d> exceeded.\n",
-								argv[0], MAX_RINGS );
-						StartupErrorMsg( stderr );
-						exit( -1 );
-					}
-				}
-				i--;
-			} //end ew rings
-		} //end argv args
-	}
-	/* Check mandatory arguments */
-	if( cargs < MINARGS ){
-		fprintf( stderr, "%s: Mandatory arguments are missing.\n",
-				argv[0] );
-		StartupErrorMsg( stderr );
-		exit( -1 );
-	}
-		
-
-	/* Specify Logos to get */
-   printf("&Type_TraceBuf2 %d\n", Type_TraceBuf2);
-	if( GetType( "TYPE_TRACEBUF2", &Type_TraceBuf2 ) != 0 ){
-		fprintf(stderr, 
-				"%s: Invalid message type <TYPE_TRACEBUF2>!\n", argv[0] );
-		exit( -1 );
-	}
-	if( GetType( "TYPE_PICK_SCNL", &Type_PickSCNL ) != 0 ){
-		fprintf(stderr, 
-				"%s: Invalid message type <TYPE_PICK_SCNL!\n", argv[0] );
-		exit( -1 );
-	}
-	if( GetModId( "MOD_WILDCARD", &ModWildcard ) != 0 ){
-		fprintf(stderr, "%s: Invalid moduleid <MOD_WILDCARD>!\n", argv[0] );
-		exit( -1 );
-	}
-	if( GetInst( "INST_WILDCARD", &InstWildcard ) != 0 ){
-		fprintf(stderr, "%s: Invalid instid <INST_WILDCARD>!\n", argv[0] );
-		exit( -1 );
-	}
-	GetLogo[0].instid = InstWildcard;
-	GetLogo[0].mod = ModWildcard;
-	GetLogo[0].type = Type_TraceBuf2;
-	GetLogo[1].instid = InstWildcard;
-	GetLogo[1].mod = ModWildcard;
-	GetLogo[1].type = Type_PickSCNL;
-	
-	/* Allocate memory for message buffer */
-	msgbuf = (char*) malloc( sizeof( char ) * MAXMSGLEN );
-	if(msgbuf==NULL){
-		fprintf( stderr, 
-				"%s: Unable to allocate memory for message buffer\n", argv[0]);
-		exit(-1);
-	}
-	
-	/* Attach to shared memory rings */
-	for( i = 0; i < nRings; i++ ){
-		tport_attach(&InRegion[i], InRingKey[i]);
-		
-		/* Flush the ring */
-		while(tport_copyfrom(&InRegion[i], GetLogo, NUMLOGOS, &reclogo,
-				&recsize, msgbuf, MAXMSGLEN, &seq[i]) != GET_NONE);
-	}
-	/* Setup mutex semaphore */
-  CreateMutex_ew();
+int main( int argc, char **argv )
+{
+   SHM_INFO        region;
+   long            RingKey;         /* Key to the transport ring to read from */
+   MSG_LOGO        getlogo[NLOGO], logo;
+   long            gotsize;
+   char            msg[MAX_TRACEBUF_SIZ];
+   char           *getSta, *getComp, *getNet, *getLoc, *inRing;
+   char            wildSta, wildComp, wildNet, wildLoc;
+   unsigned char   Type_Mseed;
+   unsigned char   Type_TraceBuf,Type_TraceBuf2;
+   unsigned char   Type_TraceComp, Type_TraceComp2;
+   unsigned char   InstWildcard, ModWildcard;
+   short          *short_data;
+   int            *long_data;
+   TRACE2_HEADER  *trh;
+   char            orig_datatype[3];
+   char            stime[256];
+   char            etime[256];
+   int             i;
+   int             rc;
+   int             nLogo = NLOGO;
+   static unsigned char InstId;        /* local installation id              */
+   char            ModName[MAX_MOD_STR];
+   char		   *modid_name;
+   unsigned char   sequence_number = 0;
+   // int             statistics_flag;
+   time_t monitor_start_time = 0;
+   double start_time, end_time;
+   unsigned long packet_total=0;
+   unsigned long packet_total_size=0;
+   MSRecord *msr = NULL;	/* mseed record */
+      
+   
+   //mongo stuff
+   mongoc_client_t *m_client;
+   mongoc_collection_t *m_collection;
+   mongoc_init ();
+   m_client = mongoc_client_new ("mongodb://ringymongo:27017/");
+   m_collection = mongoc_client_get_collection (m_client, "waveforms", "continuous");
   
-	
-  /* Start main cycle */
-	while( tport_getflag( &InRegion[0] ) != TERMINATE ){
-		int nmsgs = 0;
-		
-		
-		/* Check for messages */
-		for( i = 0; i < nRings; i++ ){
-			rc = tport_copyfrom( &InRegion[i], GetLogo, NUMLOGOS, &reclogo, 
-					&recsize, msgbuf, MAXMSGLEN, &seq[i] );
-     
-      // printf("inRegion.sid=%d\n", InRegion[i].sid);
+   mongoc_bulk_operation_t *m_bulk;
+   bson_error_t m_error;
+   bson_t *m_doc;
+   bson_t m_reply;
+   bson_t *m_data;
+   char *m_str;
+   /*wait for this many messages before performing bulk write
+   For real time continuous data it shoudl be ~ number of channels on ring*/
+   int MONGO_BULK_MAX = 30; 
+   int m_count = 0; /* counter for mongo bulk */
+   bool m_ret;
+   int m_i;
+   const char *datakey ="data";
+   
+   /*end mongo stuff*/
+   
+   
+   
+
+  /* Initialize pointers
+  **********************/
+  trh  = (TRACE2_HEADER *) msg;
+  long_data  =  (int *)( msg + sizeof(TRACE2_HEADER) );
+  short_data = (short *)( msg + sizeof(TRACE2_HEADER) );
+
+
+  /* Check command line argument
+  
+  *****************************/
+  if ( argc < 2 || argc > 6)
+  {
+     if(argc > 6)
+     fprintf(stderr, "ring2mongo: Too many parameters\n");
+     fprintf(stderr,"Usage: %s <ring name> [sta] [comp] [net] [loc] \n", argv[0]);
+     fprintf(stderr, " Note: All parameters are positional, and all but first are optional.\n");
+     fprintf(stderr, " the full data contained in the packet is printed out.\n");
+     fprintf(stderr, " If sta comp net (but not loc) are specified then only TraceBuf\n");
+     fprintf(stderr, " packets will be fetched (not TraceBuf2); otherwise both are fetched.\n");
+     fprintf(stderr, " Example: %s WAVE_RING PHOB wild NC wild n\n", argv[0]);
+     fprintf(stderr, " MSEED capability starting with version 2.5.1, prints mseed headers\n");
+     fprintf(stderr, " of TYPE_MSEED packets (no filtering yet).\n");
+     exit( 1 );
+     return 1;
+  }
+
+  /* process given parameters */
+  inRing  = argv[1];         /* first parameter is ring name */
+
+  /* any parameters not given are set as wildcards */
+  getSta = getComp = getNet = getLoc = "";
+  wildSta = wildComp = wildNet = wildLoc = 1;
+  if(argc > 2)
+  {  /* at least station parameter given */
+    getSta = argv[2];
+    wildSta  = IsWild(getSta);
+    if(argc > 3)
+    {  /* channel (component) parameter given */
+      getComp = argv[3];
+      wildComp = IsWild(getComp);
+      if(argc > 4)
+      {  /* network parameter given */
+        getNet = argv[4];
+        wildNet = IsWild(getNet);
+        if(argc > 5)
+        {  /* location parameter given (SCNL) */
+          getLoc  = argv[5];
+          wildLoc = IsWild(getLoc);
+        }
+        else
+        {  /* SCN without location parameter given */
+          nLogo = 3;    /* do not include tracebuf2s in search */
+        }
+      }
+    }
+  }
+
+  /* logit_init but do NOT WRITE to disk, this is needed for WaveMsg2MakeLocal() which logit()s */
+  logit_init("ring2mongo", 200, 200, 0);
+
+  /* Attach to ring
+  *****************/
+  if ((RingKey = GetKey( inRing )) == -1 )
+  {
+    fprintf( stderr, "Invalid RingName; exiting!\n" );
+    exit( -1 );
+    return -1;
+  }
+  tport_attach( &region, RingKey );
+
+/* Look up local installation id
+   *****************************/
+   if ( GetLocalInst( &InstId ) != 0 )
+   {
+      fprintf(stderr, "ring2mongo: error getting local installation id; exiting!\n" );
+      exit( -1 );
+      return -1;
+   }
+
+  /* Specify logos to get
+  ***********************/
+  if ( GetType( "TYPE_MSEED", &Type_Mseed ) != 0 ) {
+     fprintf(stderr, "%s: WARNING: Invalid message type <TYPE_MSEED>! Missing from earthworm.d or earthworm_global.d\n", argv[0] );
+     Type_Mseed = TYPE_NOTUSED;
+  }
+  if ( GetType( "TYPE_TRACEBUF", &Type_TraceBuf ) != 0 ) {
+     fprintf(stderr, "%s: Invalid message type <TYPE_TRACEBUF>! Missing from earthworm.d or earthworm_global.d\n", argv[0] );
+     exit( -1 );
+     return -1;
+  }
+  if ( GetType( "TYPE_TRACE_COMP_UA", &Type_TraceComp ) != 0 ) {
+     fprintf(stderr, "%s: Invalid message type <TYPE_TRACE_COMP_UA>! Missing from earthworm.d or earthworm_global.d\n", argv[0] );
+     exit( -1 );
+     return -1;
+  }
+  if ( GetType( "TYPE_TRACEBUF2", &Type_TraceBuf2 ) != 0 ) {
+     fprintf(stderr, "%s: Invalid message type <TYPE_TRACEBUF2>! Missing from earthworm.d or earthworm_global.d\n", argv[0] );
+     exit( -1 );
+     return -1;
+  }
+  if ( GetType( "TYPE_TRACE2_COMP_UA", &Type_TraceComp2 ) != 0 ) {
+     fprintf(stderr,"%s: Invalid message type <TYPE_TRACE2_COMP_UA>! Missing from earthworm.d or earthworm_global.d\n", argv[0] );
+     exit( -1 );
+     return -1;
+  }
+  if ( GetModId( "MOD_WILDCARD", &ModWildcard ) != 0 ) {
+     fprintf(stderr, "%s: Invalid moduleid <MOD_WILDCARD>! Missing from earthworm.d or earthworm_global.d\n", argv[0] );
+     exit( -1 );
+     return -1;
+  }
+  if ( GetInst( "INST_WILDCARD", &InstWildcard ) != 0 ) {
+     fprintf(stderr, "%s: Invalid instid <INST_WILDCARD>! Missing from earthworm.d or earthworm_global.d\n", argv[0] );
+     exit( -1 );
+     return -1;
+  }
+
+  for( i=0; i<nLogo; i++ ) {
+      getlogo[i].instid = InstWildcard;
+      getlogo[i].mod    = ModWildcard;
+  }
+  getlogo[0].type = Type_Mseed;
+  getlogo[1].type = Type_TraceBuf;
+  getlogo[2].type = Type_TraceComp;
+  if (nLogo >= 4) {     /* if nLogo=5 then include TraceBuf2s */
+      getlogo[3].type = Type_TraceBuf2;
+      getlogo[4].type = Type_TraceComp2;
+  }
+
+  /* Flush the ring
+  *****************/
+  while ( tport_copyfrom( &region, getlogo, nLogo, &logo, &gotsize,
+            (char *)&msg, MAX_TRACEBUF_SIZ, &sequence_number ) != GET_NONE ){
+         packet_total++;
+         packet_total_size+=gotsize;
+  }
+  fprintf( stderr, "ring2mongo: inRing flushed %ld packets of %ld bytes total.\n",
+	packet_total, packet_total_size);
+
+  while (tport_getflag( &region ) != TERMINATE ) {
+    rc = tport_copyfrom( &region, getlogo, nLogo,
+               &logo, &gotsize, msg, MAX_TRACEBUF_SIZ, &sequence_number );
+
+    if ( rc == GET_NONE ){
+      sleep_ew( 200 );
+      continue;
+    }
+
+    if ( rc == GET_TOOBIG ){
+      fprintf( stderr, "ring2mongo: retrieved message too big (%ld) for msg\n",
+        gotsize );
+      continue;
+    }
+    if ( rc == GET_NOTRACK )
+      fprintf( stderr, "ring2mongo: Tracking error.\n");
+
+    if ( rc == GET_MISS_LAPPED )
+      fprintf( stderr, "ring2mongo: Got lapped on the ring.\n");
+
+    if ( rc == GET_MISS_SEQGAP )
+      fprintf( stderr, "ring2mongo: Gap in sequence numbers\n");
+
+    if ( rc == GET_MISS )
+      fprintf( stderr, "ring2mongo: Missed messages\n");
+
+    /* Check SCNL of the retrieved message */
+
+
+    if (Type_Mseed != TYPE_NOTUSED && logo.type == Type_Mseed) {
+      /* Unpack record header and not data samples */
+      /*hard coded zero for dataflag(1) and verbose(0)for ring2mongo*/
+      if ( msr_unpack (msg, gotsize, &msr, 1, 0) != MS_NOERROR) {
+         fprintf (stderr, "Error parsing mseed record\n");
+         continue;
+      }
+
+      /* Print record information */
+      msr_print (msr, 0);
+
+      msr_free (&msr);
+      continue;
+    }
+    /*end Mseed*/
+    
+    if ( (wildSta  || (strcmp(getSta,trh->sta)  ==0)) &&
+         (wildComp || (strcmp(getComp,trh->chan)==0)) &&
+         (wildNet  || (strcmp(getNet,trh->net)  ==0)) &&
+         (((logo.type == Type_TraceBuf2 ||
+            logo.type == Type_TraceComp2) &&
+         (wildLoc  || (strcmp(getLoc,trh->loc) == 0))) ||
+         ( (logo.type == Type_TraceBuf ||
+             logo.type == Type_TraceComp))))
+    {
       
-			/* Decide what to do with message */
-			switch(rc){
-				case GET_OK:      // got a message, no errors or warnings (1)
-					break;
-               
-				case GET_NONE:    // no messages of interest, check again later (0)
-					continue;
-               
-				case GET_NOTRACK: // got a msg, but can't tell if any were missed
-					fprintf( stderr,
-							"Msg received (i%u m%u t%u); "
-							"transport.h NTRACK_GET exceeded\n",
-							reclogo.instid, reclogo.mod, reclogo.type );
-					break;
-
-				case GET_MISS_LAPPED:     // got a msg, but also missed lots
-					fprintf( stderr,
-							"Missed msg(s) from logo (i%u m%u t%u)\n",
-							reclogo.instid, reclogo.mod, reclogo.type );
-					break;
-
-				case GET_MISS_SEQGAP:     // got a msg, but seq gap
-					fprintf( stderr,
-							"Saw sequence# gap for logo (i%u m%u t%u s%u)\n",
-							reclogo.instid, reclogo.mod, reclogo.type, seq[i] );
-					break;
-
-				case GET_TOOBIG:  // next message was too big
-					fprintf( stderr,
-							"Retrieved msg[%ld] (i%u m%u t%u) "
-							"too big for msgbuf[%d]\n",
-							recsize, reclogo.instid, reclogo.mod, reclogo.type,
-							MAXMSGLEN );
-					continue;
-
-				default:         // Unknown result
-					fprintf( stderr, "Unknown tport_copyfrom result:%d\n", rc );
-					continue;
-			}
-			msgbuf[recsize] = '\0'; // Null terminate for ease of printing
-      nmsgs++;
-			
-			
-      TRACEBUF2_PLAIN *tbuf = unpack_tracebuf2(msgbuf, recsize, reclogo.type);
-      tbuf2string(tbuf);
-      // tbuf2string(tbuf);
-			if( seqno == -1 ){
-				fprintf( stderr, "%s: Error adding message to Mongo.\n", argv[0]);
-			}
-		} // End of for cycle
-		
-		/* Wait for new messages */
-		if(nmsgs == 0)
-      sleep_ew(50);
-} // End of while cycle
-	
-	/* detach from shared memory */
-	for( i=0; i<nRings; i++ ) 
-    tport_detach(&InRegion[i]);
-	
-	/* Free msg buffer */
-	free(msgbuf);
-	
-
-	
-	/* Destroy semaphore */
-	CloseMutex();
-	
-	return 0;
-}
-
-
-void StartupErrorMsg( FILE *std ){
-	fprintf( std, "WebSWave - Version: %s\n"
-			"Usage: ring2mongo -r [Earthworm Rings] [options]\n"
-			"Arguments:\n"
-			"  -r <EW rings>  : Mandatory list of earthworm ring names. At \n"
-			"                   least one ring must be given.\n"
-			"Examples:\n"
-			"  mongo -r WAVE_RING\n"
-			"earthworm_forum\n"
-      );
-	return;
-}
-
-
-TRACEBUF2_PLAIN * unpack_tracebuf2(char *msg, int msglen, unsigned char type){
-  int i;
-  TRACEBUF2_PLAIN   *tbuf = ( TRACEBUF2_PLAIN* ) msg;
-  if(strcmp(tbuf->datatype,"s4")==0 || strcmp(tbuf->datatype, "s2")==0){
-    SwapInt(&tbuf->pinno);
-    SwapInt(&tbuf->nsamp);
-    SwapInt(&tbuf->starttime);
-    SwapInt(&tbuf->endtime);
-    SwapInt(&tbuf->samprate);
-  }
-  for(i=0; i< sizeof(tbuf->data); i+=4){
-    SwapInt(&tbuf->data[i]);
-  }
-  return tbuf;
-}
-
-void tbuf2string(TRACEBUF2_PLAIN *tbuf){
-  printf("pinno: %d\n "
-        "nsamp: %d\n "
-        "starttime: %f "
-        "endtime: %f "
-        "samprate: %f "
-        "sta: %s "
-        "datatype: %s\n",
-         tbuf->pinno,
-         tbuf->nsamp,
-         tbuf->starttime,
-         tbuf->endtime,
-         tbuf->samprate,
-         tbuf->sta,
-         tbuf->datatype
-      );
-}
-
-int write2mongo(char *msg, int msglen, unsigned char type){
-	long seq = -1;
-	int status = 1;
-	unsigned char buffer[MAXMSGLEN + 100];
-	int				msgtype;
-	short			shortlen;
-	char			*msgtypestr;
-	char			msgtypestrlen;
-
-	//TODO Check Mongo here
-  //TEMP
-  int mongoReady =1;
-	if(mongoReady >0){
-		/* This is a websocket request - set while cycle to send messages */
-    // printf("type = %d\n", type);
       
-		msgtypestr = GetTypeName( ( unsigned char ) type );
-		msgtypestrlen = strlen( msgtypestr );
-    //       printf("msgtypestr=%s\n", msgtypestr);
-    // printf("msgtypestrlen=%d\n", msgtypestrlen);
-    //       printf("msglen=%d\n\n", msglen);
-    TRACEBUF2_PLAIN   *thead = ( TRACEBUF2_PLAIN* ) msg;
-    printf("nsamp:%d \n", thead->nsamp);
-			
-  }
+      strcpy(orig_datatype, trh->datatype);
+      char scnl[20];     
+      scnl[0] = 0;
+      strcat( scnl, trh->sta);
+      strcat( scnl, ".");
+      strcat( scnl, trh->chan);
+      strcat( scnl, ".");
+      strcat( scnl, trh->net);
+      strcat( scnl, ".");
+      strcat( scnl, trh->loc);
+      
+      if(WaveMsg2MakeLocal( trh ) < 0){
+        
+        char  dt[3];        
+        
+        /* now put a space if there are any punctuation marks */
+
+        for ( i=0; i<15; i++ ) {
+          if ( !isalnum(scnl[i]) && !ispunct(scnl[i]))
+            scnl[i] = ' ';
+        }
+        strncpy( dt, trh->datatype, 2 );
+        for ( i=0; i<2; i++ ) {
+          if ( !isalnum(dt[i]) && !ispunct(dt[i]))
+            dt[i] = ' ';
+        }
+        dt[i] = 0;
+        fprintf(stderr, "WARNING: WaveMsg2MakeLocal rejected tracebuf.  Discard (%s).\n",
+          scnl );
+        fprintf(stderr, "\tdatatype=[%s]\n", dt);
+        continue;
+      }
+        
+      /*lets get ready to mongo....*/
+      if(m_count < MONGO_BULK_MAX){
+        /*initialize when m_count ==0 */
+        if(m_count==0){
+          m_bulk = mongoc_collection_create_bulk_operation (m_collection, true, NULL);
+        }       
+        m_data = bson_new ();
+        m_doc = BCON_NEW ("key",   BCON_UTF8 (scnl),
+                          "nsamp", BCON_INT32 (trh->nsamp),
+                          "starttime", BCON_DOUBLE (trh->starttime),
+                          "endtime", BCON_DOUBLE (trh->endtime),
+                          "samprate", BCON_DOUBLE (trh->samprate),
+                          "datatype", BCON_UTF8 (trh->datatype)
+        );
+        bson_append_array_begin (m_doc, datakey, -1, m_data);
+        for ( i = 0; i < trh->nsamp; i++ ){
+          if ( (strcmp (trh->datatype, "s2")==0) || (strcmp (trh->datatype, "i2")==0) ){
+            bson_append_int32 (m_data, datakey, -1, short_data[i]);
+           }else{
+             bson_append_int32 (m_data, datakey, -1, long_data[i]);
+           }
+          }
+        bson_append_array_end (m_doc, m_data);                             
+        mongoc_bulk_operation_insert (m_bulk, m_doc);
+        bson_destroy (m_doc);
+        bson_destroy (m_data);
+        
+        m_count++;
+        if(m_count==MONGO_BULK_MAX){
+          
+          /*write and destroty above stuff */  
+          m_ret = mongoc_bulk_operation_execute (m_bulk, &m_reply, &m_error);
+          // m_str = bson_as_json (&m_reply, NULL);
+          // printf ("%s\n", m_str);
+          // bson_free (m_str);
+          if (!m_ret){
+             fprintf (stderr, "Error: %s\n", m_error.message);
+           }
+          bson_destroy (&m_reply);
+          mongoc_bulk_operation_destroy (m_bulk);
+          m_count = 0;
+        }
+      } 
+    }
+  } /* end of while loop */
+  
+  exit (0);
+  return 0;
 }
-
-
-
-
-
-
-
-
-
-
-/*
- * tracehead2json : Was supposed to generate a json header to include 
- * but sending the raw message may be better so this is not used for now.
- */
-int tracehead2json( char *msg, char *buf, int buflen ){
-  TRACE2_HEADER   *thead = ( TRACE2_HEADER* ) msg;
-
-  return snprintf( buf, buflen,
-      "{"
-      "\"typ\":\"tbuf2\","
-      "\"sta\":\"%s\",\"cha\":\"%s\",\"net\":\"%s\",\"loc\":\"%s\","
-      "\"st\":%.3f,\"et\":%.3f,\"sr\":%.3f,\"ns\":%d"
-      "}",
-      thead->sta, thead->chan, thead->net, thead->loc,
-      thead->starttime, thead->endtime, thead->samprate, thead->nsamp );
-}
-
-

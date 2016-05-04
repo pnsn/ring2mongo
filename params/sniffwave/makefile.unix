@@ -11,14 +11,13 @@ L = $(EW_HOME)/$(EW_VERSION)/lib
 LIB_MS = $L/libmseed.a
 
 
-O = ring2mongo.o $L/libew.a $L/swap.o
-MONGO=$(shell pkg-config --cflags --libs libmongoc-1.0)
+O = sniffwave.o $L/libew.a $L/swap.o
 
-ring2mongo2: $O
-	$(CC) $(CFLAGS) -o $B/ring2mongo $O $(SPECIFIC_FLAGS) $(LIB_MS) $(MONGO)
+sniffwave: $O
+	$(CC) $(CFLAGS) -o $B/sniffwave $O $(SPECIFIC_FLAGS) $(LIB_MS)
 
 lint:
-	lint ring2mongo.c $(GLOBALFLAGS)
+	lint sniffwave.c $(GLOBALFLAGS)
 
 
 
@@ -27,4 +26,4 @@ clean:
 	rm -f a.out core *.o *.obj *% *~
 
 clean_bin:
-	rm -f $B/ring2mongo*
+	rm -f $B/sniffwave*
