@@ -10,7 +10,7 @@ Trace Data are written to a single collection and indexed on key (SCNL) and star
 To set up mongo do the folllowing:
 * <code> > use waveform </code>
 * <code> > db.createCollection( "continuous", { capped: true, size: SOME_SIZE_IN_BYTES } ) </code>
-* <code> > db.createIndex({"key": 1, "starttime": 1}) </code>
+* <code> > db.continuous.createIndex({"key": 1, "starttime": 1}) </code>
 
 
 
