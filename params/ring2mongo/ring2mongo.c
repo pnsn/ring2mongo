@@ -83,13 +83,14 @@ int main( int argc, char **argv )
    unsigned long packet_total=0;
    unsigned long packet_total_size=0;
    MSRecord *msr = NULL;	/* mseed record */
+  logit_init("ring2mongo", 200, 256, 1); 
       
    
    //mongo stuff
    mongoc_client_t *m_client;
    mongoc_collection_t *m_collection;
    mongoc_init ();
-   m_client = mongoc_client_new ("mongodb://ringymongo:27017/");
+   m_client = mongoc_client_new ("mongodb://localhost:27017/");
    m_collection = mongoc_client_get_collection (m_client, "waveforms", "continuous");
   
    mongoc_bulk_operation_t *m_bulk;
@@ -168,8 +169,6 @@ int main( int argc, char **argv )
     }
   }
 
-  /* logit_init but do NOT WRITE to disk, this is needed for WaveMsg2MakeLocal() which logit()s */
-  logit_init("ring2mongo", 200, 200, 0);
 
   /* Attach to ring
   *****************/
@@ -238,7 +237,7 @@ int main( int argc, char **argv )
       getlogo[3].type = Type_TraceBuf2;
       getlogo[4].type = Type_TraceComp2;
   }
-
+  logit("", "Starting ring2mongo");
   /* Flush the ring
   *****************/
   while ( tport_copyfrom( &region, getlogo, nLogo, &logo, &gotsize,
@@ -246,7 +245,7 @@ int main( int argc, char **argv )
          packet_total++;
          packet_total_size+=gotsize;
   }
-  fprintf( stderr, "ring2mongo: inRing flushed %ld packets of %ld bytes total.\n",
+  logit( "et",  "ring2mongo: inRing flushed %ld packets of %ld bytes total.\n",
 	packet_total, packet_total_size);
 
   while (tport_getflag( &region ) != TERMINATE ) {
@@ -259,21 +258,21 @@ int main( int argc, char **argv )
     }
 
     if ( rc == GET_TOOBIG ){
-      fprintf( stderr, "ring2mongo: retrieved message too big (%ld) for msg\n",
+      logit("et", "ring2mongo: retrieved message too big (%ld) for msg\n",
         gotsize );
       continue;
     }
     if ( rc == GET_NOTRACK )
-      fprintf( stderr, "ring2mongo: Tracking error.\n");
+      logit("et", "ring2mongo: Tracking error.\n");
 
     if ( rc == GET_MISS_LAPPED )
-      fprintf( stderr, "ring2mongo: Got lapped on the ring.\n");
+      logit("et", "ring2mongo: Got lapped on the ring.\n");
 
     if ( rc == GET_MISS_SEQGAP )
-      fprintf( stderr, "ring2mongo: Gap in sequence numbers\n");
+      logit( "et", "ring2mongo: Gap in sequence numbers\n");
 
     if ( rc == GET_MISS )
-      fprintf( stderr, "ring2mongo: Missed messages\n");
+      logit( "et", "ring2mongo: Missed messages\n");
 
     /* Check SCNL of the retrieved message */
 
@@ -282,7 +281,7 @@ int main( int argc, char **argv )
       /* Unpack record header and not data samples */
       /*hard coded zero for dataflag(1) and verbose(0)for ring2mongo*/
       if ( msr_unpack (msg, gotsize, &msr, 1, 0) != MS_NOERROR) {
-         fprintf (stderr, "Error parsing mseed record\n");
+         logit("et", "Error parsing mseed record\n");
          continue;
       }
 
@@ -332,9 +331,9 @@ int main( int argc, char **argv )
             dt[i] = ' ';
         }
         dt[i] = 0;
-        fprintf(stderr, "WARNING: WaveMsg2MakeLocal rejected tracebuf.  Discard (%s).\n",
+        logit("et", "WARNING: WaveMsg2MakeLocal rejected tracebuf.  Discard (%s).\n",
           scnl );
-        fprintf(stderr, "\tdatatype=[%s]\n", dt);
+        logit("et", "\tdatatype=[%s]\n", dt);
         continue;
       }
         
@@ -374,7 +373,7 @@ int main( int argc, char **argv )
           // printf ("%s\n", m_str);
           // bson_free (m_str);
           if (!m_ret){
-             fprintf (stderr, "Error: %s\n", m_error.message);
+             logit ("et", "Error: %s\n", m_error.message);
            }
           bson_destroy (&m_reply);
           mongoc_bulk_operation_destroy (m_bulk);
@@ -383,7 +382,7 @@ int main( int argc, char **argv )
       } 
     }
   } /* end of while loop */
-  
+  logit("et", "signing off"); 
   exit (0);
   return 0;
 }
