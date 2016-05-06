@@ -83,14 +83,34 @@ int main( int argc, char **argv )
    unsigned long packet_total=0;
    unsigned long packet_total_size=0;
    MSRecord *msr = NULL;	/* mseed record */
-  logit_init("ring2mongo", 200, 256, 1); 
-      
-   
+   logit_init("ring2mongo", 200, 256, 1); 
+   char *mongo_user = getenv("MONGO_USER");
+   char *mongo_passwd=getenv("MONGO_PASSWD");
+   char *mongo_host=getenv("MONGO_HOST");
+   char *mongo_port=getenv("MONGO_PORT");
+   if(mongo_user == NULL ||
+      mongo_passwd==NULL ||
+      mongo_host== NULL  ||
+      mongo_port==NULL){
+        printf("Ensure the following ENV varibles are set\n *MONGO_USER\n *MONGO_PASSWD\n *MONGO_HOST\n *MONGO_PORT\n");
+        exit(1);
+        return(1);
+      }
+   char mongo_str[128];
+   strcat(mongo_str, "mongodb://");
+   strcat(mongo_str, mongo_user);
+   strcat(mongo_str, ":");
+   strcat(mongo_str, mongo_passwd);
+   strcat(mongo_str, "@");
+   strcat(mongo_str, mongo_host);
+   strcat(mongo_str, ":");
+   strcat(mongo_str, mongo_port);   
+   strcat(mongo_str, "/");
    //mongo stuff
    mongoc_client_t *m_client;
    mongoc_collection_t *m_collection;
    mongoc_init ();
-   m_client = mongoc_client_new ("mongodb://localhost:27017/");
+   m_client = mongoc_client_new (mongo_str);
    m_collection = mongoc_client_get_collection (m_client, "waveforms", "continuous");
   
    mongoc_bulk_operation_t *m_bulk;

@@ -36,4 +36,13 @@ Using startstop as an entrypoint does not work since the child processes don't r
 A earthworm 7.8 module for reading tracebuf2 data from a WAVE_RING and save to mongodb
 
 ###Standard Install
-Stay tuned...
+####Mongo-C Driver
+Follow the directions to install Mongo-C Driver
+https://github.com/mongodb/mongo-c-driver
+You'll probably have to edit the following Env variables. These paths are RHEL/CENTOS 6.5 & 7
+* <code> echo "export CPATH=$CPATH:/usr/local/include/libmongoc-1.0:/usr/local/include/libbson-1.0" >> ~/.bashrc </code>
+* <code> export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/lib" >> ~/.bashrc </code>
+* <code> export PKG_CONFIG_PATH=$PKG_CONFIG_PATH:/usr/local/lib/pkgconfig" >> ~/.bashrc </code>
+* <code> source ~/.bashrc </code>
+
+
