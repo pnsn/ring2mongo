@@ -5,12 +5,12 @@ ring2mongo only writes trace data to mongodb. It is not concerned with serving t
 
 Trace Data are written to a single collection and indexed on key (SCNL) and starttime. It is recommended that you create a capped collection to keep the colllection from growing too large.
 1) DB name: waveform
-2) Collection: continuous
+2) Collection: cwaves
 
 To set up mongo do the folllowing:
-* <code> > use waveform </code>
-* <code> > db.createCollection( "continuous", { capped: true, size: SOME_SIZE_IN_BYTES } ) </code>
-* <code> > db.continuous.createIndex({"key": 1, "starttime": 1}) </code>
+* <code> > use waveforms </code>
+* <code> > db.createCollection( "cwaves", { capped: true, size: SOME_SIZE_IN_BYTES } ) </code>
+* <code> > db.cwaves.createIndex({"key": 1, "starttime": 1}) </code>
 
 
 
