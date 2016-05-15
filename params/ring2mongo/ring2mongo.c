@@ -111,22 +111,18 @@ int main( int argc, char **argv )
    mongoc_collection_t *m_collection;
    mongoc_init ();
    m_client = mongoc_client_new (mongo_str);
-   m_collection = mongoc_client_get_collection (m_client, "waveforms", "continuous");
+   m_collection = mongoc_client_get_collection (m_client, "waveforms", "cwaves");
   
    mongoc_bulk_operation_t *m_bulk;
    bson_error_t m_error;
    bson_t *m_doc;
    bson_t m_reply;
    bson_t *m_data;
-   char *m_str;
    /*wait for this many messages before performing bulk write
    For real time continuous data it shoudl be ~ number of channels on ring*/
    int MONGO_BULK_MAX = 30; 
    int m_count = 0; /* counter for mongo bulk */
    bool m_ret;
-   int m_i;
-   const char *datakey ="data";
-   
    /*end mongo stuff*/
    
    
@@ -371,12 +367,14 @@ int main( int argc, char **argv )
                           "samprate", BCON_DOUBLE (trh->samprate),
                           "datatype", BCON_UTF8 (trh->datatype)
         );
-        bson_append_array_begin (m_doc, datakey, -1, m_data);
+       char index[4];
+       bson_append_array_begin (m_doc, "data", -1, m_data);
         for ( i = 0; i < trh->nsamp; i++ ){
+          snprintf(index, 4, "%d", i);
           if ( (strcmp (trh->datatype, "s2")==0) || (strcmp (trh->datatype, "i2")==0) ){
-            bson_append_int32 (m_data, datakey, -1, short_data[i]);
+            bson_append_int32 (m_data, index, -1, short_data[i]);
            }else{
-             bson_append_int32 (m_data, datakey, -1, long_data[i]);
+             bson_append_int32 (m_data, index, -1, long_data[i]);
            }
           }
         bson_append_array_end (m_doc, m_data);                             
@@ -389,9 +387,6 @@ int main( int argc, char **argv )
           
           /*write and destroty above stuff */  
           m_ret = mongoc_bulk_operation_execute (m_bulk, &m_reply, &m_error);
-          // m_str = bson_as_json (&m_reply, NULL);
-          // printf ("%s\n", m_str);
-          // bson_free (m_str);
           if (!m_ret){
              logit ("et", "Error: %s\n", m_error.message);
            }
