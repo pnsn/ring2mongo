@@ -1,3 +1,5 @@
+<<<<<<< Local Changes
+=======
   /*****************************************************************
    *                            ring2mongo.c                        *
    *                                                               *
@@ -6,7 +8,7 @@
         
         
         Since we always want data, the data param has been removed
-       otherwise is functions just like ring2mongo.
+       otherwise is functions just like sniffwav.
    *                                                               *
 
    * Usage: ring2mongo  <Ring> <Sta> <Comp> <Net> <Loc>   *
@@ -401,3 +403,4 @@ int main( int argc, char **argv )
   exit (0);
   return 0;
 }
+>>>>>>> External Changes

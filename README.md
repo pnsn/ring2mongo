@@ -39,10 +39,12 @@ A earthworm 7.8 module for reading tracebuf2 data from a WAVE_RING and save to m
 ####Mongo-C Driver
 Follow the directions to install Mongo-C Driver
 https://github.com/mongodb/mongo-c-driver
+I found that building from source was the only way to get it to work on Centos7
 You'll probably have to edit the following Env variables. These paths are RHEL/CENTOS 6.5 & 7
 * <code> echo "export CPATH=$CPATH:/usr/local/include/libmongoc-1.0:/usr/local/include/libbson-1.0" >> ~/.bashrc </code>
 * <code> export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/lib" >> ~/.bashrc </code>
 * <code> export PKG_CONFIG_PATH=$PKG_CONFIG_PATH:/usr/local/lib/pkgconfig" >> ~/.bashrc </code>
 * <code> source ~/.bashrc </code>
+*Ensure openssl and openssl-devel are installed before you run ./configure to set the SSL compile flag to true.
 
 
