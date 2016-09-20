@@ -1,5 +1,3 @@
-<<<<<<< Local Changes
-=======
   /*****************************************************************
    *                            ring2mongo.c                        *
    *                                                               *
@@ -403,4 +401,3 @@ int main( int argc, char **argv )
   exit (0);
   return 0;
 }
->>>>>>> External Changes
