@@ -5,7 +5,7 @@ ring2mongo only writes trace data to mongodb. It is not concerned with serving t
 
 Trace Data are written to a single collection and indexed on key (SCNL) and starttime. It is recommended that you create a capped collection to keep the colllection from growing too large.
 1) DB name: waveform
-2f) Collection: ring
+2) Collection: ring
 
 To set up mongo do the folllowing:
 * <code> > use waveforms </code>
