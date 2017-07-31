@@ -110,7 +110,7 @@ int main( int argc, char **argv )
    mongoc_collection_t *m_collection;
    mongoc_init ();
    m_client = mongoc_client_new (mongo_str);
-   m_collection = mongoc_client_get_collection (m_client, "waveforms", "cwaves");
+   m_collection = mongoc_client_get_collection (m_client, "waveforms", "ring");
   
    mongoc_bulk_operation_t *m_bulk;
    bson_error_t m_error;
@@ -361,8 +361,8 @@ int main( int argc, char **argv )
         m_data = bson_new ();
         m_doc = BCON_NEW ("key",   BCON_UTF8 (scnl),
                           "nsamp", BCON_INT32 (trh->nsamp),
-                          "starttime", BCON_DOUBLE (trh->starttime),
-                          "endtime", BCON_DOUBLE (trh->endtime),
+                          "starttime", BCON_DOUBLE (trh->starttime*1000),
+                          "endtime", BCON_DOUBLE (trh->endtime*1000),
                           "samprate", BCON_DOUBLE (trh->samprate),
                           "datatype", BCON_UTF8 (trh->datatype)
         );

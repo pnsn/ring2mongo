@@ -1,2 +1,2 @@
 #!/bin/bash
-/eworm/earthworm_7.8/bin/startstop >&/eworm/run/log/startstop_log &
+/home/eworm/earthworm_7.8/bin/startstop >&/home/eworm/run/log/startstop_log &
