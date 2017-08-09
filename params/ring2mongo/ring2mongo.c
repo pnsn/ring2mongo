@@ -96,8 +96,8 @@ int main( int argc, char **argv )
         exit(1);
         return(1);
       }
-   char mongo_str[128];
-   strcat(mongo_str, "mongodb://");
+   char mongo_str[128]="mongodb://";
+   
    strcat(mongo_str, mongo_user);
    strcat(mongo_str, ":");
    strcat(mongo_str, mongo_passwd);
