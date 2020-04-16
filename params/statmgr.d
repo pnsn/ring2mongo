@@ -23,18 +23,13 @@ RingName    WAVE_RING
 #   copystatus modules. Note statmgr may not be able to keep up
 #   on a system with a very busy ring, and you may need to 
 #   set CheckAllRings to 0 and go back to the old way of using copystatus
-#   Note this defaults to OFF if not set in the config file.
 CheckAllRings	1
-
-# Debug is an optional flag (if not provided, defaults to 0 or off)
-# for now there are 2 levels above off: 1 and 2
-# Debug 1
 
 #   <GetStatusFrom> lists the installations & modules whose heartbeats
 #   and error messages statmgr should grab from transport ring:
 #
 #              Installation     Module           Message Types
-GetStatusFrom  ${EW_INST_ID}   MOD_WILDCARD   # heartbeats & errors
+GetStatusFrom  INST_UW   MOD_WILDCARD   # heartbeats & errors
 
 #   <LogFile> sets the switch for writing a log file to disk.
 #             Set to 1 to write a file to disk.
@@ -54,20 +49,13 @@ heartbeatPageit  60
 #   The paging program maps this name to a list of pager recipients.
 #   Between 1 and 10 pagegroup lines can be used (one is required).
 #
-pagegroup   earthworm-ops
+pagegroup   techstaffew
 
-#   Between 1 and 10 names of computers to use as a mail server.
-#	   They will be tried in the order listed
+#   Specify the name of a computer to use as a mail server.
 #   This system must be alive for mail to be sent out.
 #   This parameter is used by Windows NT only.
 #
-#   Syntax
-#     MailServer  <serverName1>
-#     MailServer  <serverName2>
-#             ...
-#     MailServer  <serverNameN>
-#
-MailServer  mailserver.your.org
+MailServer  ess.washington.edu
 
 #   Between 0 and 10 email recipients may be specified below.
 #   These lines are optional.
@@ -78,12 +66,12 @@ MailServer  mailserver.your.org
 #             ...
 #     mail  <emailAddressN>
 #
-mail  earthworm-ops@your.org
+mail  joncon@uw.edu
 
 # Mail program to use, e.g /usr/ucb/Mail (not required)
 # If given, it must be a full pathname to a mail program
 #
-MailProgram /usr/ucb/Mail
+MailProgram /usr/bin/Mail
 
 
 # Specify the "From" line for the email messages. (not required)
@@ -95,8 +83,8 @@ MailProgram /usr/ucb/Mail
 
 #
 # Subject line for the email messages. (not required)
-#
-Subject "This is an earthworm status message"
+# Moved to statmgr.incl (see below for explanation)
+#Subject "eworm status from ewserver1"
 
 #
 # Message Prefix - useful for paging systems, etc.
@@ -110,10 +98,6 @@ MsgPrefix "(("
 #
 MsgSuffix "))"
 
-# new optional to squash annoying messages one might not care about
-#DontReportUnknownModule 1
-
-
 #   Now list the descriptor files which control error reporting
 #   for earthworm modules.  One descriptor file is needed
 #   for each earthworm module.  If a module is not listed here,
@@ -122,17 +106,19 @@ MsgSuffix "))"
 #   To comment out a line, insert # at the beginning of the line.
 #
 Descriptor  statmgr.desc
-# Descriptor  adsend_a.desc        # Data source (adsend) on lardass
-# Descriptor  adsend_b.desc        # Data source (adsend) on honker
-# Descriptor  picker_a.desc        # Picker programs on redhot
-# Descriptor  picker_b.desc        # Picker programs on redhot
-# Descriptor  coaxtoring.desc
-# Descriptor  diskmgr.desc
-# Descriptor  binder.desc
-# Descriptor  eqproc.desc
-Descriptor  startstop.desc
-# Descriptor  pagerfeeder.desc
-# Descriptor  pick_client.desc
-# Descriptor  pick_server.desc
-Descriptor wave_serverV.desc
-Descriptor tankplayer.desc
+#Descriptor  startstop.desc
+#Descriptor  wave_serverV_1.desc
+#Descriptor  import_generic.desc
+#Descriptor  coaxtoring.desc
+
+# Export processes on pnsndata.ess.washington.edu have been moved to
+# ~/run/params/statmgr_X.incl where X=1|2 corresponding to
+# ewserver1 and ewserver2
+# For ewserver2, this will only include mail header.
+# Each machine must have a symlink to one of these files with name
+# statmgr.incl which is loaded with next statement:
+#@statmgr.incl
+# This is done in order to allow ewserver 1 and 2 to share a common
+# subversion params checkout.
+
+

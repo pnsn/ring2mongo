@@ -74,11 +74,11 @@
 				# 0 => no alive messages to sending machine
  
 # Sender description follows:
-SenderIpAdr	128.95.16.15	# Ip address of the machine we're to listen to
-SenderPort	16036	# IP port number used by sender
+SenderIpAdr	128.95.16.37 	# Ip address of the machine we're to listen to
+SenderPort	16039	# IP port number used by sender
 SenderHeartRate	60		# Sender's heart beat interval in seconds
 				# 0 => no heartbeat expected
-SenderHeartText    "ExpJonAlive"	# Sender's heartbeat text
+SenderHeartText    "QSAlive"	# Sender's heartbeat text
 
 # Optional commands:
 
